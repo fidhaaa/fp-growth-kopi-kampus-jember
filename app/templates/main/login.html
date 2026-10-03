@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set hide_navbar = True %}
+
+{% block base_title %}Login{% endblock %}
+{% block base_header %}{% endblock %}
+
+{% block base_content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+  <div class="card p-4 shadow-sm" style="width: 100%; max-width: 420px;">
+
+    <!-- Logo dan Judul -->
+    <div class="text-center mb-3">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="80" class="mb-2">
+      <h5 class="fw-bold">Selamat Datang</h5>
+      <p class="text-muted small">Masuk ke akun Anda untuk melanjutkan</p>
+    </div>
+
+    <!-- Flash Message -->
+    {% with messages = get_flashed_messages(with_categories=True) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <!-- <div class="alert flash-alert alert-{{ 'primary' if category in ['success', 'info'] else 'danger' }} text-center"> -->
+          <div class="alert alert-{{ category }} {% if category == 'success' %}flash-alert{% endif %} text-center">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Form Login -->
+    <form method="post">
+      <div class="mb-3">
+        <label for="username" class="form-label">Nama Pengguna</label>
+        <input type="text" name="username" id="username" class="form-control" required>
+      </div>
+      <div class="mb-2">
+        <label for="password" class="form-label">Kata Sandi</label>
+        <input type="password" name="password" id="password" class="form-control" required>
+      </div>
+      <div class="d-grid mt-3">
+        <button type="submit" class="btn btn-primary">Masuk</button>
+      </div>
+    </form>
+
+    <!-- Link ke Register -->
+    <div class="mt-4 text-center border-top pt-3">
+      <small class="text-muted">Belum punya akun?</small><br>
+      <a href="{{ url_for('main.register') }}" class="text-primary small">Daftar sekarang</a>
+    </div>
+
+    <!-- Keterangan Tambahan -->
+    <!-- <div class="text-center mt-3">
+      <small class="text-muted">Gunakan akun terdaftar untuk akses ke sistem analisis Seuhah Da Lada.</small>
+    </div> -->
+  </div>
+</div>
+{% endblock %}

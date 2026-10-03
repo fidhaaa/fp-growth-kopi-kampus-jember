@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block base_title %}Insight Global{% endblock %}
+
+{% block base_header %}{% endblock %}
+
+{% block base_content %}
+<div class="pt-4">  {# Tambah padding top di dalam container agar ada jarak dari navbar #}
+    <h2 class="fw-bold mb-3">Insight Global</h2>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="mb-3">Laporan Produk Terlaris & Terpopuler</h5>
+
+            <!-- Catatan sebelum dropdown -->
+            <p class="fw-semibold">
+                🕒 Pilih rentang waktu untuk menampilkan produk terlaris dan rekomendasi terbanyak berdasarkan data keseluruhan secara global:
+            </p>
+
+            <!-- Filter Waktu -->
+            <form method="get" action="{{ url_for('main.insight_global') }}" class="mb-4 d-flex align-items-center">
+                <label for="filterWaktu" class="form-label me-2">Rentang waktu:</label>
+                <select name="filter_waktu" id="filterWaktu" class="form-select w-auto me-3" onchange="this.form.submit()">
+                    <option value="7" {% if filter_waktu == '7' %}selected{% endif %}>7 Hari Terakhir</option>
+                    <option value="30" {% if filter_waktu == '30' %}selected{% endif %}>30 Hari Terakhir</option>
+                    <option value="all" {% if filter_waktu == 'all' %}selected{% endif %}>Semua Waktu</option>
+                </select>
+            </form>
+
+            <!-- Produk Terlaris -->
+            <div class="small mt-3 mb-3 p-3 rounded" style="background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460;">
+                <strong>⭐ Produk Terlaris:</strong><br>
+                {% if produk_terlaris %}
+                    {% for p in produk_terlaris %}
+                        <span class="badge bg-primary">{{ p }}</span>
+                    {% endfor %}
+                {% else %}
+                    <span class="text-muted">Tidak ada data pada periode ini.</span>
+                {% endif %}
+            </div>
+
+            <!-- Produk Sering Direkomendasikan -->
+            <div class="small mb-3 p-3 rounded" style="background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724;">
+                <strong>📈 Produk yang sering direkomendasikan:</strong><br>
+                {% if produk_terpopuler %}
+                    {% for p in produk_terpopuler %}
+                        <span class="badge bg-success">{{ p }}</span>
+                    {% endfor %}
+                {% else %}
+                    <span class="text-muted">Tidak ada data pada periode ini.</span>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

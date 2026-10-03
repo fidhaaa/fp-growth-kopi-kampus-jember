@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block base_title %}Lihat Isi File - {{ filename }}{% endblock %}
+
+{% block base_header %}{% endblock %}
+
+{% block base_content %}
+<div class="pt-4">  {# Tambah padding top di dalam container agar ada jarak dari navbar #}
+    <div class="mb-3">
+        <h2 class="page-title mb-1">Pratinjau Isi File</h2>
+            <div class="page-subtitle">
+                {{ filename }}
+            </div>
+    </div>
+    <div class="mb-3">
+        {% if history %}
+        <a href="{{ url_for('main.dashboard', scroll_to=history.id) }}"
+
+           class="btn btn-kembali btn-sm">
+            ← Kembali ke Dashboard
+        </a>
+        {% else %}
+        <a href="{{ url_for('main.dashboard') }}"
+           class="btn btn-secondary btn-sm">
+            &larr; Kembali ke Dashboard
+        </a>
+        {% endif %}
+    </div>
+
+    {% if records %}
+    <div class="info-summary mb-4">
+        <div class="info-item">
+            <div class="info-icon">📊</div>
+            <div>
+                <div class="info-title">Total Data</div>
+                <div class="info-value">{{ "{:,}".format(row_count).replace(",", ".") }} transaksi</div>
+            </div>
+        </div>
+
+        <div class="info-item">
+            <div class="info-icon">👀</div>
+            <div>
+                <div class="info-title">Data Ditampilkan</div>
+                <div class="info-value">100 data pertama</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="lihat-data-table">
+        <div class="table-card-header d-flex justify-content-between align-items-center">
+            <div class="fw-semibold">
+                📋 Pratinjau Data
+            </div>
+
+            <span class="badge jumlah-data">
+                {{ "{:,}".format(row_count).replace(",", ".") }} transaksi
+            </span>
+        </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-primary">
+                        <tr>
+                            {% for col in columns %}
+                                <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in records %}
+                        <tr class="{% if loop.index is odd %}baris-putih{% else %}baris-abu{% endif %}">
+                            {% for cell in row %}
+                                <td>{{ cell }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        {% else %}
+            <div class="alert alert-warning">File tidak memiliki data untuk ditampilkan.
+            </div>
+            
+        {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+

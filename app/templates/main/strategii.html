@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container py-4">
+  <h2>💼 Strategi Penjualan Berdasarkan Analisis</h2>
+  <p class="text-muted">
+    Rekomendasi strategi otomatis berdasarkan nilai 
+    <strong>confidence</strong> dan <strong>lift</strong> dari aturan asosiasi.
+  </p>
+
+  <div class="mb-3">
+    <a href="{{ url_for('main.export_strategi_pdf', history_id=history.id) }}" class="btn btn-success">
+      📄 Export ke PDF
+    </a>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Produk A</th>
+          <th>Produk B</th>
+          <th>Confidence</th>
+          <th>Lift</th>
+          <th>Strategi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in strategi_list %}
+        <tr>
+          <td>{{ s.produk_a }}</td>
+          <td>{{ s.produk_b }}</td>
+          <td>{{ s.confidence }}</td>
+          <td>{{ s.lift }}</td>
+          <td>
+            <span class="badge bg-{{ s.badge_class }}">
+              {{ s.emoji }} {{ s.kategori }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h4 class="mt-4">📌 Insight Strategi</h4>
+  <ul>
+    {% for it in insights %}
+      <li>{{ it }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block base_title %}Simulasi Rekomendasi Produk{% endblock %}
+
+{% block base_header %}{% endblock %}
+
+{% block base_content %}
+<div class="pt-4">  {# Tambah padding top di dalam container agar ada jarak dari navbar #}
+    <h2 class="fw-bold mb-3">Simulasi Rekomendasi Produk</h2>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            
+            <!-- Dropdown Pilih Data -->
+            <form method="get" action="{{ url_for('main.simulasi') }}" class="mb-3">
+                <label class="form-label">Pilih Data Analisis (Milik User)</label>
+                <select name="history_id" class="form-select" onchange="this.form.submit()">
+                    {% for h in all_histories %}
+                    <option value="{{ h.id }}" {% if h.id == selected_analysis_id %}selected{% endif %}>
+                        {{ h.filename }} - {{ h.date_uploaded.strftime('%Y-%m-%d') }} ({{ h.user.username }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </form>
+
+            <!-- Pesan siapa pemilik data -->
+            {% if pemilik_data %}
+            <div class="small mt-3 p-3 rounded" style="background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460;">
+                Simulasi ini menggunakan <strong>data milik user: {{ pemilik_data }}</strong>.
+            </div>
+            {% endif %}
+
+            <!-- Produk Terlaris dari file terpilih -->
+            <div class="small mt-3 mb-3 p-3 rounded" style="background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724;">
+                <strong>⭐ Produk terlaris:</strong><br>
+                {% if produk_terlaris_pilihan %}
+                    {% for p in produk_terlaris_pilihan %}
+                        <span class="badge bg-success">{{ p }}</span>
+                    {% endfor %}
+                {% else %}
+                    <span class="text-muted">File kosong atau gagal dibaca.</span>
+                {% endif %}
+            </div>
+
+            <div class="small mt-3 mb-3 p-3 rounded"
+                style="background-color:#fff3cd;
+                        border:1px solid #ffeeba;
+                        color:#856404;">
+
+                <strong>📉 Produk dengan Frekuensi Penjualan Terendah:</strong><br>
+
+                {% if produk_kurang_laris_pilihan %}
+                    {% for produk in produk_kurang_laris_pilihan %}
+                        <span class="badge bg-warning text-dark">
+                            {{ produk }}
+                        </span>
+                    {% endfor %}
+                {% else %}
+                    <span class="text-muted">
+                        File kosong atau gagal dibaca.
+                    </span>
+                {% endif %}
+            </div>
+
+            <!-- Form  Checkbox Pilih Produk -->
+            <form method="post">
+                <input
+                    type="hidden"
+                    name="history_id"
+                    value="{{ selected_analysis_id }}">
+                <p class="fw-semibold">Pilih produk yang dibeli:</p>
+                <div class="row">
+                    {% for p in semua_produk %}
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="produk" value="{{ p }}" id="p{{ loop.index }}" {% if p in produk_dipilih %}checked{% endif %} {% if produk_dipilih %}disabled{% endif %}>
+                            <label 
+                                class="form-check-label 
+                                    {% if p in produk_sesuai %}highlight-sesuai{% endif %}"     
+                                for="p{{ loop.index }}"
+                                {% if p in produk_sesuai %}title="Bagian dari aturan asosiasi"{% endif %}
+                            >
+                                {{ p }}
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-success" {% if produk_dipilih %}disabled{% endif %}>Lihat Rekomendasi</button>
+                </div>
+                <div class="mt-2">
+                    <a href="{{ url_for('main.simulasi', history_id=selected_analysis_id) }}" 
+                    class="btn btn-outline-secondary">Reset Form</a>
+                </div>
+
+                {% if produk_dipilih %}
+                <div class="simulasi-note mt-3">
+                    <strong>Catatan:</strong>
+                    Klik <strong>Reset Form</strong> untuk mencoba kombinasi produk lainnya.
+                </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <!-- Kombinasi Sesuai -->
+    {% if kombinasi_sudah_sesuai %}
+    <div class="alert alert-success mt-4">
+        <strong>Kombinasi produk yang dipilih sudah sesuai dengan aturan asosiasi:</strong>
+        <ul class="mb-0">
+            {% for combo in kombinasi_sudah_sesuai %}
+            <li><strong>{{ combo.lhs }}</strong> → <strong>{{ combo.rhs }}</strong></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Tampilkan Rekomendasi -->
+    {% if rekomendasi %}
+    <div class="mt-4">
+        <h4>Rekomendasi Produk:</h4>
+        <div class="row">
+            {% for pemicu, produk_list in rekomendasi.items() %}
+            <div class="col-md-6 mb-3">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-info-subtle text-info-emphasis">
+                        Berdasarkan: {{ pemicu }}
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        {% for r in produk_list %}
+                        <li class="list-group-item">{{ r }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% elif not kombinasi_sudah_sesuai and produk_dipilih %}
+    <div class="mt-4">
+        <div class="alert alert-warning">
+            <strong>Tidak ada rekomendasi ditemukan!</strong><br>
+            Coba pilih kombinasi produk lainnya.
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

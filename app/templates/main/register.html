@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set hide_navbar = True %}
+
+{% block base_title %}Registrasi Akun{% endblock %}
+{% block base_header %}{% endblock %}
+
+{% block base_content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+  <div class="card p-4 shadow-sm" style="width: 100%; max-width: 420px;">
+    
+    <!-- Logo -->
+    <div class="text-center mb-3">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="80" class="mb-2">
+      <h5 class="fw-bold">Registrasi Akun</h5>
+      <p class="text-muted small">Buat akun untuk mulai menggunakan sistem</p>
+    </div>
+
+    <!-- Flash Message -->
+    {% with messages = get_flashed_messages(with_categories=True) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <!-- <div class="alert flash-alert alert-{{ 'primary' if category in ['success', 'info'] else 'danger' }} text-center"> -->
+          <div class="alert alert-{{ category }} {% if category == 'success' %}flash-alert{% endif %} text-center">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Form Register -->
+    <form method="post" novalidate>
+      <div class="mb-3">
+        <label for="username" class="form-label">Nama Pengguna</label>
+        <input type="text" name="username" id="username" class="form-control" required minlength="3">
+        <small class="form-text text-muted">Nama pengguna minimal 3 karakter</small>
+      </div>
+      <div class="mb-2">
+        <label for="password" class="form-label">Kata Sandi</label>
+        <input type="password" name="password" id="password" class="form-control" required minlength="6">
+        <small class="form-text text-muted">Kata Sandi minimal 6 karakter</small>
+      </div>
+      <div class="d-grid mt-3">
+        <button type="submit" class="btn btn-primary">Daftar</button>
+      </div>
+    </form>
+
+    <!-- Link ke login -->
+    <div class="mt-4 text-center border-top pt-3">
+      <small class="text-muted">Sudah punya akun?</small><br>
+      <a href="{{ url_for('main.login') }}" class="text-primary small">Masuk sekarang</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
