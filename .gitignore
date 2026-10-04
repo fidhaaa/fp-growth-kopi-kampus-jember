@@ -16,4 +16,6 @@ uploads/*
 *.xlsx
 *.csv
 
+!app/data/demo_transaksi.csv
+
 .DS_Store

@@ -5,6 +5,9 @@
 {% block base_header %}{% endblock %}
 
 {% block base_content %}
+{% if session.get('role') == 'demo' %}
+<div class="alert alert-info mt-3">Mode Demo: data yang tersedia adalah data sintetis untuk mencoba fitur sistem. Mode ini bersifat read-only.</div>
+{% endif %}
 <div class="pt-4" px-3>  <!--{# Tambah padding top di dalam container agar ada jarak dari navbar #} -->
 
     <!-- Flash messages -->

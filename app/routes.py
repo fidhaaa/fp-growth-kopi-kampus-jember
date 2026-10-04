@@ -68,7 +68,7 @@ def register():
             return redirect(url_for('main.register'))
         
         # Cek apakah ini user pertama
-        is_first_user = User.query.count() == 0
+        is_first_user = User.query.filter(User.role.in_(['admin', 'user'])).count() == 0
         role = 'admin' if is_first_user else 'user'
 
         # Buat user baru
@@ -84,6 +84,28 @@ def register():
         return redirect(url_for('main.login'))
 
     return render_template('main/register.html')
+
+@main.route('/demo')
+def demo_login():
+    # One-click portfolio demo using synthetic, read-only data.
+    from app import _ensure_demo_data
+    _ensure_demo_data(current_app)
+
+    user = User.query.filter_by(username='demo').first()
+    if not user:
+        flash('Demo sedang tidak tersedia.', 'danger')
+        return redirect(url_for('main.login'))
+
+    session['user_id'] = user.id
+    session['username'] = user.username
+    session['role'] = user.role
+
+    log = UserActivityLog(username='demo', action='login', status='berhasil - mode demo')
+    db.session.add(log)
+    db.session.commit()
+
+    return redirect(url_for('main.dashboard'))
+
 
 @main.route('/login', methods=['GET', 'POST'])
 def login():
@@ -719,6 +741,10 @@ def hapus_file(history_id):
     # Ambil informasi user login
     user_id = session['user_id']
     user_role = session.get('role')
+
+    if user_role == 'demo':
+        flash('Mode demo bersifat read-only. Data contoh tidak dapat dihapus.', 'info')
+        return redirect('/dashboard')
     
     # Admin boleh hapus semua, user hanya boleh hapus miliknya
     if user_role != 'admin' and history.user_id != user_id:
@@ -792,6 +818,10 @@ def upload():
 
     if 'user_id' not in session:
         return redirect('/login')
+
+    if session.get('role') == 'demo':
+        flash('Mode demo bersifat read-only. Gunakan menu ini melalui akun Anda sendiri untuk mengunggah data.', 'info')
+        return redirect(url_for('main.dashboard'))
 
     if request.method == 'POST':
         file = request.files.get('file')
@@ -1087,6 +1117,8 @@ def simulasi():
 
 @main.route('/insight-global')
 def insight_global():
+    import pandas as pd
+
     # Ambil parameter filter waktu dari URL
     filter_waktu = request.args.get('filter_waktu', 'all')
 
