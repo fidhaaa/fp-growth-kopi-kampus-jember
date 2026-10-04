@@ -6,28 +6,13 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from time import time
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import networkx as nx
-import pandas as pd
-from fpdf import FPDF
-from matplotlib import rcParams
-from matplotlib.font_manager import FontProperties
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, send_file, abort, current_app
 from .extensions import db
 from app.models import SimulationHistory, AnalysisHistory, User, UserActivityLog
-from app.utils.fp_growth import analyze_fp_growth_from_list
-from app.utils.validation import allowed_file, validate_and_process_file
 from werkzeug.exceptions import RequestEntityTooLarge
 
 MENU_FILE = "produk_valid.xlsx"
-
-rcParams['font.family'] = 'Segoe UI Emoji'
 
 main = Blueprint('main', __name__)
 
@@ -224,6 +209,8 @@ def dashboard():
 
 @main.route('/lihat_data/<int:history_id>')
 def lihat_data(history_id):
+    import pandas as pd
+
     if 'user_id' not in session:
         return redirect('/login')
     
@@ -254,6 +241,8 @@ def lihat_data(history_id):
 
 @main.route('/export/<int:history_id>')
 def export_excel(history_id):
+    import pandas as pd
+
     if 'user_id' not in session:
         return redirect('/login')
 
@@ -308,6 +297,8 @@ def export_excel(history_id):
 
 @main.route('/export_pdf/<int:history_id>')
 def export_pdf(history_id):
+    from fpdf import FPDF
+
     if 'user_id' not in session:
         return redirect('/login')
 
@@ -377,6 +368,15 @@ def export_pdf(history_id):
 
 @main.route('/visualisasi_tampil/<int:history_id>')
 def visualisasi_tampil(history_id):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import networkx as nx
+    from matplotlib import rcParams
+    from matplotlib.font_manager import FontProperties
+
+    rcParams['font.family'] = 'Segoe UI Emoji'
+
     if 'user_id' not in session:
         return redirect('/login')
 
@@ -787,6 +787,9 @@ def reset_aplikasi():
 
 @main.route('/upload', methods=['GET', 'POST'])
 def upload():
+    from app.utils.validation import allowed_file, validate_and_process_file
+    from app.utils.fp_growth import analyze_fp_growth_from_list
+
     if 'user_id' not in session:
         return redirect('/login')
 
@@ -877,6 +880,8 @@ def download_template(filetype):
 
 @main.route('/simulasi', methods=['GET', 'POST'])
 def simulasi():
+    import pandas as pd
+
     if 'user_id' not in session:
         return redirect('/login')
 
