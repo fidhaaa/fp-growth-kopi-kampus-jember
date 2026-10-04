@@ -68,7 +68,7 @@ def register():
             return redirect(url_for('main.register'))
         
         # Cek apakah ini user pertama
-        is_first_user = User.query.filter(User.role.in_(['admin', 'user'])).count() == 0
+        is_first_user = User.query.count() == 0
         role = 'admin' if is_first_user else 'user'
 
         # Buat user baru
@@ -103,7 +103,6 @@ def demo_login():
     log = UserActivityLog(username='demo', action='login', status='berhasil - mode demo')
     db.session.add(log)
     db.session.commit()
-
     return redirect(url_for('main.dashboard'))
 
 
@@ -207,7 +206,10 @@ def dashboard():
         min_conf, min_lift, min_length = 0.3, 1.0, 1
 
     # Ambil semua riwayat analisis user
-    histories = AnalysisHistory.query.order_by(AnalysisHistory.date_uploaded.desc()).all()
+    if session.get('role') == 'admin':
+        histories = AnalysisHistory.query.order_by(AnalysisHistory.date_uploaded.desc()).all()
+    else:
+        histories = AnalysisHistory.query.filter_by(user_id=session['user_id']).order_by(AnalysisHistory.date_uploaded.desc()).all()
 
     # Lakukan filter aturan berdasarkan form
     for h in histories:
@@ -741,10 +743,6 @@ def hapus_file(history_id):
     # Ambil informasi user login
     user_id = session['user_id']
     user_role = session.get('role')
-
-    if user_role == 'demo':
-        flash('Mode demo bersifat read-only. Data contoh tidak dapat dihapus.', 'info')
-        return redirect('/dashboard')
     
     # Admin boleh hapus semua, user hanya boleh hapus miliknya
     if user_role != 'admin' and history.user_id != user_id:
@@ -819,9 +817,9 @@ def upload():
     if 'user_id' not in session:
         return redirect('/login')
 
-    if session.get('role') == 'demo':
-        flash('Mode demo bersifat read-only. Gunakan menu ini melalui akun Anda sendiri untuk mengunggah data.', 'info')
-        return redirect(url_for('main.dashboard'))
+    if request.method == 'POST' and session.get('role') == 'demo':
+        flash('Mode Demo hanya dapat melihat halaman Upload. Silakan daftar untuk mengunggah dan menganalisis data.', 'info')
+        return redirect(url_for('main.upload'))
 
     if request.method == 'POST':
         file = request.files.get('file')
@@ -1117,8 +1115,6 @@ def simulasi():
 
 @main.route('/insight-global')
 def insight_global():
-    import pandas as pd
-
     # Ambil parameter filter waktu dari URL
     filter_waktu = request.args.get('filter_waktu', 'all')
 
