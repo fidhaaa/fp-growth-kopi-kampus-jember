@@ -6,13 +6,13 @@
 
 {% block base_content %}
 <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
-  <div class="card p-4 shadow-sm" style="width: 100%; max-width: 420px;">
+  <div class="card p-3 shadow-sm" style="width: 100%; max-width: 400px;">
 
     <!-- Logo dan Judul -->
     <div class="text-center mb-3">
       <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="80" class="mb-2">
-      <h5 class="fw-bold">Selamat Datang</h5>
-      <p class="text-muted small">Masuk ke akun Anda untuk melanjutkan</p>
+      <h5 class="fw-bold mb-1">Selamat Datang</h5>
+      <p class="text-muted small mb-2">Masuk ke akun Anda untuk melanjutkan</p>
     </div>
 
     <!-- Flash Message -->
@@ -42,14 +42,29 @@
       </div>
     </form>
 
-    <!-- Link ke Register -->
-    <div class="mt-4 text-center border-top pt-3">
-      <small class="text-muted">Belum punya akun?</small><br>
-      <a href="{{ url_for('main.register') }}" class="text-primary small">Daftar sekarang</a>
-    </div>
+    <!-- Register & Demo -->
+    <div class="text-center mt-3">
+        <hr class="my-3">
 
-    <div class="text-center mt-2">
-      <a href="{{ url_for('main.demo_login') }}" class="text-success small">Coba Demo</a>
+        <div>
+            <div class="text-muted mb-1">
+                Belum punya akun?
+            </div>
+
+            <a href="{{ url_for('main.register') }}"
+              class="text-primary">
+                Daftar sekarang
+            </a>
+        </div>
+
+        <div class="text-muted my-2">
+            atau
+        </div>
+
+        <a href="{{ url_for('main.demo_login') }}"
+          class="login-demo-link">
+            Coba Mode Demo
+        </a>
     </div>
 
     <!-- Keterangan Tambahan -->

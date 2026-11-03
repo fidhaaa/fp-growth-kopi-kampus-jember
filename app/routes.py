@@ -2,6 +2,7 @@ import io
 import json
 import hashlib
 import os
+import pandas as pd
 from collections import Counter
 from datetime import datetime, timedelta
 
@@ -105,7 +106,6 @@ def demo_login():
     db.session.commit()
     return redirect(url_for('main.dashboard'))
 
-
 @main.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -132,14 +132,19 @@ def login():
 
 def get_rules(history):
     try:
+        if not history.result:
+            print(f"[GET_RULES] History {history.id}: RESULT KOSONG")
+            return []
+
         rules = json.loads(history.result)
+
+        print(f"[GET_RULES] History {history.id}: {len(rules)} rules terbaca")
 
         for rule in rules:
             rule["antecedents"] = [
                 clean_product_name(item)
                 for item in rule["antecedents"]
             ]
-
             rule["consequents"] = [
                 clean_product_name(item)
                 for item in rule["consequents"]
@@ -147,7 +152,9 @@ def get_rules(history):
 
         return rules
 
-    except Exception:
+    except Exception as e:
+        print(f"[GET_RULES ERROR] History {history.id}: {e}")
+        print(f"[GET_RULES ERROR] Result preview: {str(history.result)[:500]}")
         return []
 
 def get_filtered_rules(history, min_conf, min_lift, min_length):
@@ -194,6 +201,13 @@ def clean_product_name(nama):
 def dashboard():
     if 'user_id' not in session:
         return redirect('/login')
+
+    # Ambil data user yang sedang login dari database
+    current_user = db.session.get(User, session['user_id'])
+
+    if not current_user:
+        session.clear()
+        return redirect('/login')
     
     last_visualized_id = session.pop('last_visualized_id', None)  # Ambil & hapus dari session
 
@@ -205,11 +219,14 @@ def dashboard():
     except:
         min_conf, min_lift, min_length = 0.3, 1.0, 1
 
-    # Ambil semua riwayat analisis user
-    if session.get('role') == 'admin':
-        histories = AnalysisHistory.query.order_by(AnalysisHistory.date_uploaded.desc()).all()
-    else:
-        histories = AnalysisHistory.query.filter_by(user_id=session['user_id']).order_by(AnalysisHistory.date_uploaded.desc()).all()
+    # Ambil semua riwayat analisis
+    # Semua user dapat melihat hasil analisis,
+    # tetapi hak menghapus tetap dibatasi berdasarkan role.
+    histories = (
+        AnalysisHistory.query
+        .order_by(AnalysisHistory.date_uploaded.desc())
+        .all()
+    )
 
     # Lakukan filter aturan berdasarkan form
     for h in histories:
@@ -228,6 +245,7 @@ def dashboard():
                            min_lift=min_lift,
                            min_length=min_length,
                            username=session['username'],
+                           current_user=current_user,
                            last_visualized_id=last_visualized_id,
                            scroll_to=scroll_to)
 
@@ -742,9 +760,16 @@ def hapus_file(history_id):
 
     # Ambil informasi user login
     user_id = session['user_id']
-    user_role = session.get('role')
+    current_user = db.session.get(User, user_id)
+
+    if not current_user:
+        session.clear()
+        return redirect('/login')
+
+    user_role = current_user.role
     
-    # Admin boleh hapus semua, user hanya boleh hapus miliknya
+    # Admin boleh menghapus semua data
+    # User biasa hanya boleh menghapus data miliknya sendiri
     if user_role != 'admin' and history.user_id != user_id:
         flash('Anda tidak memiliki izin untuk menghapus data ini.', 'danger')
         return redirect('/dashboard')
@@ -772,42 +797,6 @@ def hapus_file(history_id):
 
     flash('Data berhasil dihapus.', 'success')
     return redirect('/dashboard')
-
-@main.route('/reset_aplikasi', methods=['POST'])
-def reset_aplikasi():
-    if 'user_id' not in session or session.get('role') != 'admin':
-        flash("Akses ditolak.", "danger")
-        return redirect(url_for('main.dashboard'))
-
-    from app.models import User  # import model User
-    import shutil
-
-    try:
-        # Hapus semua data dari database
-        AnalysisHistory.query.delete()
-        SimulationHistory.query.delete()
-        User.query.delete()
-        db.session.commit()
-
-        # Hapus folder uploads
-        upload_path = current_app.config['UPLOAD_FOLDER']
-        if os.path.exists(upload_path):
-            shutil.rmtree(upload_path)
-        os.makedirs(upload_path, exist_ok=True)
-
-        flash("Aplikasi berhasil di-reset.  Silakan buat akun baru untuk mulai menggunakan aplikasi kembali.", "success")
-
-        session.pop("user_id", None)
-        session.pop("username", None)
-        session.pop("role", None)
-
-        return redirect(url_for('main.register'))
-    
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Gagal me-reset aplikasi: {str(e)}", "danger")
-
-    return redirect(url_for('main.dashboard'))
 
 @main.route('/upload', methods=['GET', 'POST'])
 def upload():
@@ -906,8 +895,24 @@ def download_template(filetype):
 
     return send_file(filepath, as_attachment=True)
 
+@main.route('/download-dummy')
+def download_dummy():
+    filename = "data_dummy_transaksi.xlsx"
+
+    filepath = os.path.join(
+        current_app.static_folder,
+        "template",
+        filename
+    )
+
+    if not os.path.exists(filepath):
+        abort(404)
+
+    return send_file(filepath, as_attachment=True)
+
 @main.route('/simulasi', methods=['GET', 'POST'])
 def simulasi():
+
     import pandas as pd
 
     if 'user_id' not in session:
@@ -917,12 +922,18 @@ def simulasi():
     kombinasi_sudah_sesuai = []
     produk_dipilih = request.form.getlist('produk')
     semua_produk = set(produk_dipilih)
-    produk_sesuai = set() 
+    produk_sesuai = set()
 
-    # Ambil semua history dari semua user untuk pilihan dropdown
-    all_histories = AnalysisHistory.query.order_by(AnalysisHistory.date_uploaded.desc()).all()
+    # =========================================================
+    # 1. AMBIL HISTORY
+    # =========================================================
 
-    # Tentukan ID analisis yang dipilih user dari form
+    all_histories = (
+        AnalysisHistory.query
+        .order_by(AnalysisHistory.date_uploaded.desc())
+        .all()
+    )
+
     if request.method == "POST":
         selected_analysis_id = request.form.get("history_id")
     else:
@@ -931,136 +942,255 @@ def simulasi():
     history = None
     pemilik_data = None
 
-    # Jika user memilih analisis tertentu
+    # Jika user memilih history tertentu
     if selected_analysis_id:
-        history = AnalysisHistory.query.filter_by(id=selected_analysis_id).first()
+        history = (
+            AnalysisHistory.query
+            .filter_by(id=selected_analysis_id)
+            .first()
+        )
+
+    # Jika tidak memilih, ambil history milik user
     else:
-        # Default: ambil milik user itu sendiri jika ada
-        history = AnalysisHistory.query.filter_by(user_id=session['user_id'])\
-                                       .order_by(AnalysisHistory.date_uploaded.desc()).first()
-        # Jika tetap kosong, pakai data admin
+        history = (
+            AnalysisHistory.query
+            .filter_by(user_id=session['user_id'])
+            .order_by(AnalysisHistory.date_uploaded.desc())
+            .first()
+        )
+
+        # Jika tidak ada, gunakan data admin
         if not history:
             admin_user = User.query.filter_by(username='admin').first()
+
             if admin_user:
-                history = AnalysisHistory.query.filter_by(user_id=admin_user.id)\
-                                               .order_by(AnalysisHistory.date_uploaded.desc()).first()
+                history = (
+                    AnalysisHistory.query
+                    .filter_by(user_id=admin_user.id)
+                    .order_by(AnalysisHistory.date_uploaded.desc())
+                    .first()
+                )
 
     if not history:
-        flash("Belum ada hasil analisis. Silakan upload terlebih dahulu.", 'warning')
+        flash(
+            "Belum ada hasil analisis. Silakan upload terlebih dahulu.",
+            'warning'
+        )
         return redirect('/upload')
 
-    # Ambil nama pemilik data
+    # =========================================================
+    # 2. PEMILIK DATA
+    # =========================================================
+
     pemilik = db.session.get(User, history.user_id)
     pemilik_data = pemilik.username if pemilik else 'Tidak diketahui'
-        
-    # Ambil dan kumpulkan semua produk dari aturan hasil analisis
+
+    # =========================================================
+    # 3. AMBIL RULE HASIL ANALISIS
+    # =========================================================
+
     rules = get_rules(history)
 
+    # Tambahkan produk dari rules ke daftar produk
     for rule in rules:
         semua_produk.update(rule["antecedents"])
         semua_produk.update(rule["consequents"])
 
-    # Hitung produk terlaris dari file yang dipilih
+    # =========================================================
+    # 4. HITUNG PRODUK TERLARIS
+    #    OPTIMASI:
+    #    - CSV tidak menggunakan engine="python"
+    #    - Excel hanya membaca kolom yang diperlukan
+    # =========================================================
+
     produk_terlaris_pilihan = []
     counter_terlaris_pilihan = Counter()
+
+    filepath = os.path.join(
+        current_app.config['UPLOAD_FOLDER'],
+        history.filename
+    )
+
     try:
-        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], history.filename)
-        print("="*50)
-        print("History ID :", history.id)
-        print("Filename   :", history.filename)
-        print("Filepath   :", filepath)
-        print("Exists     :", os.path.exists(filepath))
+
         if os.path.exists(filepath):
+
             ext = history.filename.rsplit(".", 1)[1].lower()
-            # File CSV (format basket)
+
+            # -------------------------------------------------
+            # CSV
+            # -------------------------------------------------
             if ext == "csv":
+
                 df = pd.read_csv(
                     filepath,
-                    header=None,
-                    engine="python"
+                    header=None
                 )
-                for row in df.values:
+
+                for row in df.itertuples(index=False, name=None):
+
                     for cell in row:
+
                         if pd.isna(cell):
                             continue
-                        items = [
-                            clean_product_name(item)
-                            for item in str(cell).split(",")
-                            if clean_product_name(item)
-                        ]
+
+                        items = []
+
+                        for item in str(cell).split(","):
+
+                            cleaned = clean_product_name(item)
+
+                            if cleaned:
+                                items.append(cleaned)
+
                         counter_terlaris_pilihan.update(items)
-            # File Excel (format transaksi)
-            else:
-                df = pd.read_excel(filepath)
-                print("Shape :", df.shape)
-                print("Kolom :", df.columns.tolist())
 
-                print(df.tail(10))
-                df.columns = df.columns.astype(str).str.strip()
-                if "Produk" in df.columns:
-                    df = df.dropna(subset=["Struk", "Produk"])
-                    counter_terlaris_pilihan.update(
-                            df["Produk"]
-                            .astype(str)
-                            .str.strip()
-                            .apply(clean_product_name)                     
+                del df
+
+            # -------------------------------------------------
+            # EXCEL
+            # -------------------------------------------------
+            elif ext in ("xlsx", "xls"):
+
+                # Hanya baca kolom yang diperlukan
+                try:
+                    df = pd.read_excel(
+                        filepath,
+                        usecols=["Struk", "Produk"]
                     )
+                except Exception:
+                    # Fallback kalau format file berbeda
+                    df = pd.read_excel(filepath)
+
+                    df.columns = (
+                        df.columns
+                        .astype(str)
+                        .str.strip()
+                    )
+
+                    if "Produk" in df.columns:
+
+                        if "Struk" in df.columns:
+                            df = df.dropna(
+                                subset=["Struk", "Produk"]
+                            )
+                        else:
+                            df = df.dropna(
+                                subset=["Produk"]
+                            )
+
+                    else:
+                        df = pd.DataFrame()
+
+                if not df.empty and "Produk" in df.columns:
+
+                    df["Produk"] = (
+                        df["Produk"]
+                        .astype(str)
+                        .str.strip()
+                        .apply(clean_product_name)
+                    )
+
+                    df = df[df["Produk"] != ""]
+
+                    counter_terlaris_pilihan.update(
+                        df["Produk"]
+                    )
+
+                del df
+
     except Exception as e:
-        print(f"[ERROR] Gagal membaca file {history.filename}: {e}")
-    produk_terlaris_pilihan = [item[0] for item in counter_terlaris_pilihan.most_common(3)] 
-    produk_terlaris_nama = set(produk_terlaris_pilihan)
 
-    if "Produk" in df.columns:
-        mask = df["Produk"].astype(str).str.strip().str.lower() == "es"
-        print(df.loc[mask])
+        print(
+            f"[ERROR] Gagal membaca file "
+            f"{history.filename}: {e}"
+        )
 
-        for k, v in counter_terlaris_pilihan.items():
-            if k.startswith("Es"):
-                print(repr(k), v)
+    # =========================================================
+    # 5. PRODUK TERLARIS
+    # =========================================================
 
+    produk_terlaris_pilihan = [
+        item[0]
+        for item in counter_terlaris_pilihan.most_common(3)
+    ]
 
+    produk_terlaris_nama = set(
+        produk_terlaris_pilihan
+    )
 
-    # Hitung produk kurang terlaris dari file yang dipilih
+    # =========================================================
+    # 6. PRODUK KURANG LARIS
+    # =========================================================
+
     produk_kurang_laris_pilihan = [
         produk
         for produk, jumlah in sorted(
             counter_terlaris_pilihan.items(),
             key=lambda x: x[1]
         )
-        if produk not in produk_terlaris_nama      
+        if produk not in produk_terlaris_nama
     ][:3]
 
-    # Proses form POST untuk rekomendasi produk
+    # =========================================================
+    # 7. PROSES REKOMENDASI
+    # =========================================================
+
     if request.method == 'POST':
+
         produk_dipilih = request.form.getlist('produk')
         produk_dipilih_set = set(produk_dipilih)
+
         produk_sesuai = set()
 
         for rule in rules:
+
             lhs_set = set(rule["antecedents"])
             rhs_set = set(rule["consequents"])
 
+            # Produk yang dipilih memenuhi antecedent
             if lhs_set.issubset(produk_dipilih_set):
 
+                # Jika consequent juga sudah dipilih
                 if rhs_set.issubset(produk_dipilih_set):
+
                     kombinasi_sudah_sesuai.append({
                         "lhs": ", ".join(lhs_set),
                         "rhs": ", ".join(rhs_set)
                     })
+
+                # Jika consequent belum dipilih
                 else:
+
                     key = ", ".join(lhs_set)
 
                     rekomendasi.setdefault(key, [])
 
-                    rekomendasi[key].extend([
-                        r for r in rhs_set
-                        if r not in produk_dipilih_set
-                        and r not in rekomendasi[key]
-                    ])
+                    for r in rhs_set:
+
+                        if (
+                            r not in produk_dipilih_set
+                            and r not in rekomendasi[key]
+                        ):
+                            rekomendasi[key].append(r)
+
+        # =====================================================
+        # 8. PRODUK YANG SUDAH SESUAI
+        # =====================================================
 
         for combo in kombinasi_sudah_sesuai:
-            produk_sesuai.update(combo['lhs'].split(', '))
-            produk_sesuai.update(combo['rhs'].split(', '))
+
+            produk_sesuai.update(
+                combo['lhs'].split(', ')
+            )
+
+            produk_sesuai.update(
+                combo['rhs'].split(', ')
+            )
+
+        # =====================================================
+        # 9. SIMPAN HISTORY SIMULASI
+        # =====================================================
 
         semua_rekomendasi_flat = set()
 
@@ -1070,82 +1200,93 @@ def simulasi():
         new_simulasi = SimulationHistory(
             user_id=session['user_id'],
             selected_products=', '.join(produk_dipilih),
-            recommended_products=', '.join(semua_rekomendasi_flat)
+            recommended_products=', '.join(
+                semua_rekomendasi_flat
+            )
         )
 
         db.session.add(new_simulasi)
         db.session.commit()
 
-    # Badge produk yg paling sering direkomendasikan versi tanpa highligt di checkbox produk
-    # Hitung frekuensi produk rekomendasi
-    # produk_rekom_counter = Counter()
-    # for produk_list in rekomendasi.values():
-    #     produk_rekom_counter.update(produk_list)
+    # =========================================================
+    # 10. RENDER
+    # =========================================================
 
-    # Ambil 3 produk paling sering direkomendasikan (opsional bisa disesuaikan)
-    # produk_terpopuler = [produk for produk, _ in produk_rekom_counter.most_common(3)]
+    return render_template(
+        'main/simulasi.html',
 
-    # Badge produk yg paling sering direkomendasikan versi dg highligt di checkbox produk
-    # Hitung produk paling sering muncul di bagian RHS dari aturan
-    # counter_rhs = Counter()
-    # for line in history.result.split('\n'):
-    #     if '->' in line and 'conf:' in line:
-    #         try:
-    #             rhs = line.split('->')[1].split('(')[0]
-    #             rhs_items = [item.strip() for item in rhs.split(',')]
-    #             counter_rhs.update(rhs_items)
-    #         except:
-    #             continue
+        semua_produk=sorted(semua_produk),
 
-    # Ambil 3 produk yang paling sering direkomendasikan
-    # produk_terpopuler = [item[0] for item in counter_rhs.most_common(3)]
+        produk_dipilih=produk_dipilih,
 
-    return render_template('main/simulasi.html',
-                           semua_produk=sorted(semua_produk),
-                           produk_dipilih=produk_dipilih,
-                           rekomendasi=rekomendasi,
-                           kombinasi_sudah_sesuai=kombinasi_sudah_sesuai,
-                           produk_sesuai=produk_sesuai,
-                           produk_terlaris_pilihan = produk_terlaris_pilihan,
-                           produk_kurang_laris_pilihan=produk_kurang_laris_pilihan,
-                           pemilik_data=pemilik_data,
-                           all_histories=all_histories,
-                           selected_analysis_id=selected_analysis_id or history.id,
-                           history=history)
+        rekomendasi=rekomendasi,
+
+        kombinasi_sudah_sesuai=kombinasi_sudah_sesuai,
+
+        produk_sesuai=produk_sesuai,
+
+        produk_terlaris_pilihan=produk_terlaris_pilihan,
+
+        produk_kurang_laris_pilihan=
+            produk_kurang_laris_pilihan,
+
+        pemilik_data=pemilik_data,
+
+        all_histories=all_histories,
+
+        selected_analysis_id=
+            selected_analysis_id or history.id,
+
+        history=history
+    )
 
 @main.route('/insight-global')
 def insight_global():
-    # Ambil parameter filter waktu dari URL
+
     filter_waktu = request.args.get('filter_waktu', 'all')
 
-    # Filter hasil berdasarkan waktu
+    # Filter waktu
     batas_tanggal = None
+
     if filter_waktu == '7':
         batas_tanggal = datetime.utcnow() - timedelta(days=7)
+
     elif filter_waktu == '30':
         batas_tanggal = datetime.utcnow() - timedelta(days=30)
 
-    # Ambil semua hasil history untuk menghitung produk terpopuler
+    # Ambil seluruh hasil analisis
     all_analysis = AnalysisHistory.query.all()
 
-    # Produk Terlaris
+    # Counter produk terlaris
     counter_terlaris = Counter()
+
+    # Counter produk yang sering menjadi rekomendasi
     counter_rhs = Counter()
 
     for h in all_analysis:
+
+        # Filter berdasarkan tanggal upload
         if batas_tanggal and h.date_uploaded < batas_tanggal:
             continue
 
-        # Hitung Produk Terlaris
+        # ==========================================
+        # 1. HITUNG PRODUK TERLARIS
+        # ==========================================
+
         try:
+
             filepath = os.path.join(
                 current_app.config['UPLOAD_FOLDER'],
                 h.filename
             )
 
             if os.path.exists(filepath):
+
                 ext = h.filename.rsplit(".", 1)[1].lower()
+
+                # CSV
                 if ext == "csv":
+
                     df = pd.read_csv(
                         filepath,
                         header=None,
@@ -1153,9 +1294,12 @@ def insight_global():
                     )
 
                     for row in df.values:
+
                         for cell in row:
+
                             if pd.isna(cell):
                                 continue
+
                             items = [
                                 clean_product_name(item)
                                 for item in str(cell).split(",")
@@ -1163,41 +1307,81 @@ def insight_global():
                             ]
 
                             counter_terlaris.update(items)
-                else:
+
+                # XLS / XLSX
+                elif ext in ["xls", "xlsx"]:
+
                     df = pd.read_excel(filepath)
-                    df.columns = df.columns.astype(str).str.strip()
+
+                    # Rapikan nama kolom
+                    df.columns = (
+                        df.columns
+                        .astype(str)
+                        .str.strip()
+                    )
 
                     if "Produk" in df.columns:
-                        counter_terlaris.update(
-                            df["Produk"].dropna().apply(clean_product_name)
+
+                        produk = (
+                            df["Produk"]
+                            .dropna()
+                            .apply(clean_product_name)
                         )
 
-        except Exception:
-            pass
+                        counter_terlaris.update(produk)
 
-        # Hitung Produk Terpopuler
-        rules = get_rules(h)
+        except Exception as e:
 
-        for rule in rules:
-            counter_rhs.update(
-                clean_product_name(item)
-                for item in rule["consequents"]
+            print(
+                f"[INSIGHT] Gagal membaca "
+                f"{h.filename}: {e}"
             )
 
+        # ==========================================
+        # 2. HITUNG PRODUK TERPOPULER
+        # ==========================================
+
+        try:
+
+            rules = get_rules(h)
+
+            for rule in rules:
+
+                counter_rhs.update(
+                    clean_product_name(item)
+                    for item in rule["consequents"]
+                )
+
+        except Exception as e:
+
+            print(
+                f"[INSIGHT] Gagal membaca rules "
+                f"history {h.id}: {e}"
+            )
+
+    # Ambil 5 produk terlaris
     produk_terlaris = [
         item[0]
         for item in counter_terlaris.most_common(5)
     ]
 
+    # Ambil 5 produk yang paling sering direkomendasikan
     produk_terpopuler = [
         item[0]
         for item in counter_rhs.most_common(5)
     ]
 
-    return render_template('main/insight_global.html',
-                           produk_terlaris=produk_terlaris,
-                           produk_terpopuler=produk_terpopuler,
-                           filter_waktu=filter_waktu)
+    print("========== INSIGHT DEBUG ==========")
+    print("Produk terlaris:", produk_terlaris)
+    print("Produk terpopuler:", produk_terpopuler)
+    print("===================================")
+
+    return render_template(
+        'main/insight_global.html',
+        produk_terlaris=produk_terlaris,
+        produk_terpopuler=produk_terpopuler,
+        filter_waktu=filter_waktu
+    )
 
 @main.route('/logout')
 def logout():

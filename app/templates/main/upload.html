@@ -42,15 +42,22 @@
         Belum memiliki format data? Unduh template berikut:
     </small>
 
-    <a href="{{ url_for('main.download_template', filetype='xlsx') }}"
-       class="btn btn-kembali btn-sm me-2">
-        📄 Download Template Excel
-    </a>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <a href="{{ url_for('main.download_template', filetype='xlsx') }}"
+           class="btn btn-kembali btn-sm">
+            📄 Download Template Excel
+        </a>
 
-    <a href="{{ url_for('main.download_template', filetype='csv') }}"
-       class="btn btn-kembali btn-sm">
-        📄 Download Template CSV
-    </a>
+        <a href="{{ url_for('main.download_template', filetype='csv') }}"
+           class="btn btn-kembali btn-sm">
+            📄 Download Template CSV
+        </a>
+
+        <a href="{{ url_for('main.download_dummy') }}"
+        class="btn btn-dummy btn-sm">
+            🔗 Coba dengan Data Dummy
+        </a>
+    </div>
 </div>
 
 <!-- Catatan Format Upload -->
@@ -103,7 +110,7 @@
 
             - Baris yang mengandung data kosong (missing value) akan dihapus secara otomatis apabila jumlahnya <strong>tidak melebihi 2%</strong> dari keseluruhan data<br> 
             
-            - Apablila jumlah data kosong (missing value) <strong>melebihi batas 2%</strong> dari keseluruhan data, maka file tidak dapat diproses.
+            - Apabila jumlah data kosong (missing value) <strong>melebihi batas 2%</strong> dari keseluruhan data, maka file tidak dapat diproses.
         </div>
     </div>
 </div>
