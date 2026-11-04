@@ -5,6 +5,7 @@ import sqlite3
 import zipfile
 from pathlib import Path, PurePosixPath
 from app.extensions import db
+from datetime import datetime
 
 from flask import (
     Blueprint, request, current_app, abort,
@@ -173,6 +174,111 @@ def validate_package(package_bytes):
     finally:
         connection.close()
 
+def create_online_backup():
+    database_path = Path(db.engine.url.database).resolve()
+    upload_folder = Path(current_app.config["UPLOAD_FOLDER"])
+
+    backup_dir = STAGING_DIR / "online_backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    backup_db = backup_dir / f"backup_{timestamp}.db"
+    backup_zip = backup_dir / f"online_backup_{timestamp}.zip"
+
+    source = sqlite3.connect(str(database_path))
+    destination = sqlite3.connect(str(backup_db))
+
+    try:
+        source.backup(destination)
+    finally:
+        destination.close()
+        source.close()
+
+    try:
+        with zipfile.ZipFile(
+            backup_zip, "w", zipfile.ZIP_DEFLATED
+        ) as archive:
+            archive.write(
+                backup_db,
+                "database/fp_growth_demo.db"
+            )
+
+            if upload_folder.exists():
+                for file_path in upload_folder.iterdir():
+                    if file_path.is_file():
+                        archive.write(
+                            file_path,
+                            f"uploads/{file_path.name}"
+                        )
+
+        # Verifikasi ZIP dan database hasil backup
+        with zipfile.ZipFile(backup_zip, "r") as archive:
+            if archive.testzip() is not None:
+                raise ValueError("Backup ZIP rusak.")
+
+            db_bytes = archive.read(
+                "database/fp_growth_demo.db"
+            )
+
+        check_db = sqlite3.connect(":memory:")
+        try:
+            check_db.deserialize(db_bytes)
+
+            integrity = check_db.execute(
+                "PRAGMA integrity_check"
+            ).fetchone()[0]
+
+            if integrity != "ok":
+                raise ValueError("Backup database tidak valid.")
+        finally:
+            check_db.close()
+
+    except Exception:
+        if backup_zip.exists():
+            backup_zip.unlink()
+        raise
+
+    finally:
+        if backup_db.exists():
+            backup_db.unlink()
+
+    return backup_zip
+
+@recovery.route("/admin/recovery/backup", methods=["POST"])
+def backup_online():
+    check_token()
+
+    if not Path("/data").is_dir():
+        abort(403)
+
+    database_url = db.engine.url
+
+    if database_url.get_backend_name() != "sqlite":
+        abort(400)
+
+    active_database = Path(database_url.database).resolve()
+
+    if active_database != Path("/data/fp_growth_demo.db").resolve():
+        abort(400)
+
+    try:
+        backup_file = create_online_backup()
+
+        return render_template_string("""
+            <h2>Backup Online Berhasil</h2>
+            <p>File: {{ filename }}</p>
+            <p>Lokasi: {{ location }}</p>
+            <strong>Database online belum diubah.</strong>
+        """,
+        filename=backup_file.name,
+        location=str(backup_file))
+
+    except Exception:
+        current_app.logger.exception(
+            "Gagal membuat backup online."
+        )
+        return "Backup gagal. Periksa log aplikasi.", 500
+
 @recovery.route(
     "/admin/recovery/stage",
     methods=["GET", "POST"]
@@ -194,15 +300,24 @@ def stage_recovery():
 
     if request.method == "GET":
         return render_template_string("""
-            <h2>Validasi Paket Pemulihan</h2>
-            <p>Unggah recovery_package.zip untuk diperiksa.</p>
-            <form method="POST" enctype="multipart/form-data">
-                <p>Token pemulihan:</p>
+            <h2>Manajemen Pemulihan Database</h2>
+
+            <h3>1. Backup Database Online</h3>
+            <form method="POST" action="/admin/recovery/backup">
                 <input type="password" name="token"
-                       required autocomplete="off">
-                <p>Paket pemulihan:</p>
+                    placeholder="Token pemulihan" required>
+                <button type="submit">Buat Backup Online</button>
+            </form>
+
+            <hr>
+
+            <h3>2. Validasi Paket Pemulihan</h3>
+            <form method="POST" enctype="multipart/form-data">
+                <input type="password" name="token"
+                    placeholder="Token pemulihan" required>
+                <p>Pilih recovery_package.zip:</p>
                 <input type="file" name="package"
-                       accept=".zip" required>
+                    accept=".zip" required>
                 <button type="submit">Validasi Paket</button>
             </form>
         """)
