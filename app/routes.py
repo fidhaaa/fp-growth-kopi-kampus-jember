@@ -5,6 +5,8 @@ import os
 import pandas as pd
 from collections import Counter
 from datetime import datetime, timedelta
+from flask import jsonify
+from pathlib import Path
 
 from time import time
 
@@ -1387,3 +1389,54 @@ def insight_global():
 def logout():
     session.clear()
     return redirect('/login')
+
+
+@main.route('/admin/diagnostics/db')
+def database_diagnostics():
+    if 'user_id' not in session:
+        abort(403)
+
+    current_user = db.session.get(User, session['user_id'])
+
+    if not current_user or current_user.role != 'admin':
+        abort(403)
+
+    database = db.engine.url
+    database_path = database.database if database else None
+
+    if database_path and database_path.startswith('sqlite:///'):
+        database_path = database_path.replace('sqlite:///', '', 1)
+
+    upload_folder = Path(current_app.config['UPLOAD_FOLDER'])
+
+    upload_files = (
+        [f for f in upload_folder.iterdir() if f.is_file()]
+        if upload_folder.exists()
+        else []
+    )
+
+    result = {
+        "database_type": database.drivername,
+        "database_path": database_path,
+        "database_exists": (
+            Path(database_path).exists()
+            if database.drivername == 'sqlite'
+            and database_path
+            else None
+        ),
+        "upload_folder": str(upload_folder),
+        "upload_folder_exists": upload_folder.exists(),
+        "upload_file_count": len(upload_files),
+        "upload_total_size_bytes": sum(
+            f.stat().st_size for f in upload_files
+        ),
+        "user_count": User.query.count(),
+        "admin_count": User.query.filter_by(role='admin').count(),
+        "normal_user_count": User.query.filter_by(role='user').count(),
+        "demo_count": User.query.filter_by(role='demo').count(),
+        "analysis_count": AnalysisHistory.query.count(),
+        "simulation_count": SimulationHistory.query.count(),
+        "activity_log_count": UserActivityLog.query.count()
+    }
+
+    return jsonify(result)
