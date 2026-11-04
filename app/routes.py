@@ -1441,3 +1441,70 @@ def database_diagnostics():
     }
 
     return jsonify(result)
+
+@main.route('/admin/diagnostics/backup')
+def backup_online_database():
+    import sqlite3
+    import tempfile
+    import zipfile
+    from pathlib import Path
+
+    if 'user_id' not in session:
+        abort(403)
+
+    current_user = db.session.get(User, session['user_id'])
+
+    # Hanya akun lama yang diizinkan mengambil backup.
+    if not current_user or current_user.username != 'admin':
+        abort(403)
+
+    db_path = db.engine.url.database
+
+    if db.engine.url.drivername != 'sqlite':
+        abort(400)
+
+    if not db_path or not Path(db_path).exists():
+        abort(404)
+
+    upload_folder = Path(current_app.config['UPLOAD_FOLDER'])
+    output = io.BytesIO()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        backup_path = Path(temp_dir) / 'online_backup.db'
+
+        # Backup SQLite menggunakan mekanisme backup resmi.
+        source = sqlite3.connect(db_path)
+        destination = sqlite3.connect(str(backup_path))
+
+        try:
+            source.backup(destination)
+        finally:
+            destination.close()
+            source.close()
+
+        # Gabungkan database dan file upload ke ZIP.
+        with zipfile.ZipFile(
+            output, 'w', zipfile.ZIP_DEFLATED
+        ) as archive:
+
+            archive.write(
+                backup_path,
+                arcname='database/online_backup.db'
+            )
+
+            if upload_folder.exists():
+                for file in upload_folder.iterdir():
+                    if file.is_file():
+                        archive.write(
+                            file,
+                            arcname=f'uploads/{file.name}'
+                        )
+
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='backup_database_online.zip'
+    )
