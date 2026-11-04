@@ -1398,7 +1398,8 @@ def database_diagnostics():
 
     current_user = db.session.get(User, session['user_id'])
 
-    if not current_user or current_user.role != 'admin':
+    if not current_user:
+        session.clear()
         abort(403)
 
     database = db.engine.url
