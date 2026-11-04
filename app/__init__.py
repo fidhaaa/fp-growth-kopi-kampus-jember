@@ -66,14 +66,16 @@ def create_app():
     Migrate(app, db)
 
     from .routes import main
+    from .recovery import recovery
+
     app.register_blueprint(main)
+    app.register_blueprint(recovery)
 
     with app.app_context():
         db.create_all()
         _ensure_demo_data(app)
 
     return app
-
 
 def _ensure_demo_data(app):
     # Create a read-only demo account and synthetic portfolio dataset.
